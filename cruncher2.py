@@ -72,8 +72,8 @@ def calculateAttractions(indices):
         direction = math.atan2(deltaY, deltaX)
         distance = math.pow(deltaX,2) + math.pow(deltaY,2)
         afScalar = GRAVITY * (1/r.value) * distance
-        things[[r]['parent']]['forceX'] -= afScalar * math.cos(direction)
-        things[[r]['parent']]['forceY'] -= afScalar * math.sin(direction)
+        things[relations[r]['parent']]['forceX'] -= afScalar * math.cos(direction)
+        things[relations[r]['parent']]['forceY'] -= afScalar * math.sin(direction)
 
 def moveParticles():
     global things, world
