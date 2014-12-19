@@ -19,13 +19,14 @@ CYCLE = 1
 # Helper Functions
 def populateData():
     global things, cur, world
+    print "Initializing World"
     world = []
-    for i in range (0,1000):
+    for i in range(0,1000):
         inner = []
         for j in range (0,1000):
             inner.append(None)
         world.append(inner)
-
+    print "Populating things"
     cur.execute("SELECT * FROM things")
     dbThings = cur.fetchall()
     for dbThing in dbThings:
@@ -36,15 +37,17 @@ def populateData():
         thing = {'posX': dbThing['posX'], 'posY': dbThing['posY'], 'forceX': 0.0, 'forceY': 0.0}
         things[dbThing['id']] = thing
         world[thing['posX']][thing['posY']] = thing
+
+    print "Populating relations"
     cur.execute("SELECT * FROM relations")
     dbRelations = cur.fetchall()
     for dbRelation in dbRelations:
-        relations.append({'parent': dbRelation['parent'], 'child': dbRelation['child'], 'value': dbThing['value']})
+        relations.append({'parent': dbRelation['parent'], 'child': dbRelation['child'], 'value': dbRelation['value']})
 
 def findRandomEmptyLocation():
     random.seed()
-    randX = math.floor(random.random() * len(world))
-    randY = math.floor(random.random() * len(world[randX]))
+    randX = int(random.random() * len(world))
+    randY = int(random.random() * len(world[randX]))
     if world[randX][randY] is None:
         return (randX,randY)
     else:
@@ -53,55 +56,62 @@ def findRandomEmptyLocation():
 def findEmptyLocationAroundPoint(x, y, radius):
     if(world[x][y] is None):
         return (x,y)
-    for i in random.shuffle(range(x - radius, x + radius)):
+    for i in range(x - radius, x + radius):
         if i < 0 or i >= len(world):
             continue
-        for j in random.shuffle(range(y - radius, y + radius)):
-            if j < 0 or j > len(world[i])-1:
+        for j in range(y - radius, y + radius):
+            if j < 0 or j >= len(world[i]):
                 continue
             if(world[i][j] is None):
                 return (i,j)
     return findEmptyLocationAroundPoint(x, y, radius + 1)
 
 #Calculation Function
-def calculateAttractions(indices):
+def calculateAttractions(start, end):
     global things, relations
-    for r in indices:
-        deltaX = things[relations[r]['parent']]['posX'] - things[relations[r]['child']]['posX']
-        deltaY = things[relations[r]['parent']]['posY'] - things[relations[r]['child']]['posY']
+    #print "Calculating attractions for section "+str(start)+" through "+str(end)
+    for r in relations[start:end]:
+        if r['parent'] not in things or r['child'] not in things:
+            print "Invalid key for thing"
+            continue
+        deltaX = things[r['parent']]['posX'] - things[r['child']]['posX']
+        deltaY = things[r['parent']]['posY'] - things[r['child']]['posY']
         direction = math.atan2(deltaY, deltaX)
         distance = math.pow(deltaX,2) + math.pow(deltaY,2)
-        afScalar = GRAVITY * (1/r.value) * distance
-        things[relations[r]['parent']]['forceX'] -= afScalar * math.cos(direction)
-        things[relations[r]['parent']]['forceY'] -= afScalar * math.sin(direction)
+        afScalar = GRAVITY * (1/r['parent']) * distance
+        things[r['parent']]['forceX'] -= afScalar * math.cos(direction)
+        things[r['parent']]['forceY'] -= afScalar * math.sin(direction)
 
 def moveParticles():
     global things, world
+    #print "Moving particles"
     for t in things:
-        targetX = math.floor(things[t]['posX'] + things[t]['forceX'])
-        targetY = math.floor(things[t]['posY'] + things[t]['forceY'])
+        targetX = int(things[t]['posX'] + things[t]['forceX'])
+        targetY = int(things[t]['posY'] + things[t]['forceY'])
         coordinates = findEmptyLocationAroundPoint(targetX, targetY, 1)
         world[things[t]['posX']][things[t]['posY']] = None
         world[coordinates[0]][coordinates[1]] = things[t]
         things[t]['posX'] = coordinates[0]
         things[t]['posY'] = coordinates[1]
+        things[t]['forceX'] = 0
+        things[t]['forceY'] = 0
 
 def threadedCalculator(dt):
     random.shuffle(relations)
     threads = []
-    t1 = threading.Thread(name='t1', target=calculateAttractions, args=(range(0,len(relations)/4-1)))
+    t1 = threading.Thread(name='t1', target=calculateAttractions, args=(0,len(relations)/4-1))
     threads.append(t1)
     t1.start()
 
-    t2 = threading.Thread(name='t2', target=calculateAttractions, args=(range(len(relations)/4,len(relations)/2-1)))
+    t2 = threading.Thread(name='t2', target=calculateAttractions, args=(len(relations)/4,len(relations)/2-1))
     threads.append(t2)
     t2.start()
 
-    t3 = threading.Thread(name='t3', target=calculateAttractions, args=(range(len(relations)/2,len(relations)/4*3-1)))
+    t3 = threading.Thread(name='t3', target=calculateAttractions, args=(len(relations)/2,len(relations)/4*3-1))
     threads.append(t3)
     t3.start()
 
-    t4 = threading.Thread(name='t4', target=calculateAttractions, args=(range(len(relations)/4*3,len(relations)-1)))
+    t4 = threading.Thread(name='t4', target=calculateAttractions, args=(len(relations)/4*3,len(relations)-1))
     threads.append(t4)
     t4.start()
 
@@ -127,7 +137,7 @@ def updateDB():
         if(i%10 == 0): con.commit()
         i += 1
     con.commit()
-    print "Finished Updating DB"
+    print "Finished Updating DB at",datetime.now()
 
 def refreshData():
     global things, relations, world
@@ -163,34 +173,15 @@ dbConnect()
 refreshData()
 
 print "Starting calculator at ",datetime.now()
-while ( True ):
+while ( 1 ):
     threadedCalculator(1)
-    if(CYCLE%800 == 0):
-        print "Halting calculator at ",datetime.now()
+    if(CYCLE%50 == 0):
+        print "Halting calculator at ", datetime.now(), " at cycle ", CYCLE
         updateDB()
         #refreshData()
+        #print "Sample output"
+        #print things[1]['posX']
         print "Starting calculator at ",datetime.now()
     CYCLE += 1
 
-'''
-Pseudo-Code for new algorithm
-
-
-things = []
-relations = []
-LOAD-DATA:
-    data = DB -> SELECT * FROM things
-    for row in data:
-        things[row.id] = {row}
-    data = DB -> SELECT * FROM relations
-    for row in data:
-        relations[row.id] = {row}
-CALCULATE:
-    for t in things:
-        t.force += Center_Force
-        for t2 in things:
-            if t == t2 or t2: continue/skip
-            t.force -= Repulsive_Force
-    for r in relations:
-        things[r.parent].force += Attractive_Force(things[r.child])
-'''
+exitCruncher()
