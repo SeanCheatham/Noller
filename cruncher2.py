@@ -9,20 +9,22 @@ from datetime import datetime
 
 # Config Variables
 PERSONALSPACE = 0.5
-GRAVITY = 1e-7
+GRAVITY = 1e-3
 CENTER_REPULSION = 5e-4
-PARTICLE_REPULSION = 5e-5
+PARTICLE_REPULSION = 1e-5
+PARTICLE_REPULSION_RADIUS = 5
 EXECUTIONTIME = 1740
 CYCLE = 1
+WORLD_SIZE = 1000
 
 # Helper Functions
 def populateData():
     global things, cur, world
     print "Initializing World"
     world = []
-    for i in range(0,1000):
+    for i in range(0, WORLD_SIZE):
         inner = []
-        for j in range (0,1000):
+        for j in range(0, WORLD_SIZE):
             inner.append(None)
         world.append(inner)
     print "Populating things"
@@ -45,16 +47,14 @@ def populateData():
 
 def findRandomEmptyLocation():
     random.seed()
-    randX = int(random.random() * len(world))
-    randY = int(random.random() * len(world[randX]))
+    randX = int(random.random() * len(world)/2 + len(world)/4)
+    randY = int(random.random() * len(world[randX])/2 + len(world[randX])/4)
     if world[randX][randY] is None:
-        return (randX,randY)
+        return (randX, randY)
     else:
         return findRandomEmptyLocation()
 
 def findEmptyLocationAroundPoint(x, y, radius):
-    if(world[x][y] is None):
-        return (x,y)
     for i in range(x - radius, x + radius):
         if i < 0 or i >= len(world):
             continue
@@ -81,13 +81,14 @@ def calculateAttractions(start, end):
         things[r['parent']]['forceX'] -= afScalar * math.cos(direction)
         things[r['parent']]['forceY'] -= afScalar * math.sin(direction)
 
-def calculateRepulsions():
+def calculateRepulsions(keys):
     global things
-    for t in things:
-        for i in range(-5,5):
+    #print "Calculating Repulsions at ",datetime.now()
+    for t in keys:
+        for i in range(int(-1 * PARTICLE_REPULSION_RADIUS), int(PARTICLE_REPULSION_RADIUS)):
             if things[t]['posX'] + i < 0 or things[t]['posX'] + i >= len(world):
                 continue
-            for j in range(-5,5):
+            for j in range(int(-1 * PARTICLE_REPULSION_RADIUS), int(PARTICLE_REPULSION_RADIUS)):
                 if things[t]['posY'] + j < 0 or things[t]['posY'] + j >= len(world[i]):
                     continue
                 if i == 0 and j == 0:
@@ -100,17 +101,19 @@ def calculateRepulsions():
                 distance = abs(math.sqrt(math.pow(deltaX, 2) + math.pow(deltaY, 2)))
                 if distance > 0:
                     afScalar = PARTICLE_REPULSION / distance
-                    world[things[t]['posX'] + i][things[t]['posY'] + j]['posX'] -= afScalar * math.cos(direction)
-                    world[things[t]['posX'] + i][things[t]['posY'] + j]['posY'] -= afScalar * math.sin(direction)
+                    world[things[t]['posX'] + i][things[t]['posY'] + j]['forceX'] -= afScalar * math.cos(direction)
+                    world[things[t]['posX'] + i][things[t]['posY'] + j]['forceY'] -= afScalar * math.sin(direction)
 
 def moveParticles():
     global things, world
-    #print "Moving particles"
-    random.shuffle(things)
-    for t in things:
+    print "Moving particles at", datetime.now()
+    #random.shuffle(things)
+    keys = list(things.keys())
+    random.shuffle(keys)
+    for t in keys:
         targetX = int(things[t]['posX'] + things[t]['forceX'])
         targetY = int(things[t]['posY'] + things[t]['forceY'])
-        coordinates = findEmptyLocationAroundPoint(targetX, targetY, 1)
+        coordinates = findEmptyLocationAroundPoint(targetX, targetY, 0)
         world[things[t]['posX']][things[t]['posY']] = None
         world[coordinates[0]][coordinates[1]] = things[t]
         things[t]['posX'] = coordinates[0]
@@ -120,6 +123,9 @@ def moveParticles():
 
 def threadedCalculator(dt):
     random.shuffle(relations)
+    keys = list(things.keys())
+    random.shuffle(keys)
+
     threads = []
     t1 = threading.Thread(name='t1', target=calculateAttractions, args=(0,len(relations)/4-1))
     threads.append(t1)
@@ -137,10 +143,30 @@ def threadedCalculator(dt):
     threads.append(t4)
     t4.start()
 
+    t5 = threading.Thread(name='t5', target=calculateRepulsions, args=([keys[:len(keys)/4-1]]))
+    threads.append(t5)
+    t5.start()
+
+    t6 = threading.Thread(name='t6', target=calculateRepulsions, args=([keys[len(keys)/4:len(keys)/2-1]]))
+    threads.append(t6)
+    t6.start()
+
+    t7 = threading.Thread(name='t7', target=calculateRepulsions, args=([keys[len(keys)/2:len(keys)/4*3-1]]))
+    threads.append(t7)
+    t7.start()
+
+    t8 = threading.Thread(name='t8', target=calculateRepulsions, args=([keys[len(keys)/4*3:]]))
+    threads.append(t8)
+    t8.start()
+
     t1.join()
     t2.join()
     t3.join()
     t4.join()
+    t5.join()
+    t6.join()
+    t7.join()
+    t8.join()
 
     moveParticles()
 
@@ -197,7 +223,7 @@ refreshData()
 print "Starting calculator at ",datetime.now()
 while ( 1 ):
     threadedCalculator(1)
-    if(CYCLE%50 == 0):
+    if(CYCLE%100 == 0):
         print "Halting calculator at ", datetime.now(), " at cycle ", CYCLE
         updateDB()
         #refreshData()
