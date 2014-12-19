@@ -67,7 +67,7 @@ def findEmptyLocationAroundPoint(x, y, radius):
     return findEmptyLocationAroundPoint(x, y, radius + 1)
 
 #Calculation Function
-def calculateAttractions(start, end):
+def calculateForces(start, end):
     global things, relations
     #print "Calculating attractions for section "+str(start)+" through "+str(end)
     for r in relations[start:end]:
@@ -81,10 +81,14 @@ def calculateAttractions(start, end):
         afScalar = GRAVITY * (1/r['parent']) * distance
         things[r['parent']]['forceX'] -= afScalar * math.cos(direction)
         things[r['parent']]['forceY'] -= afScalar * math.sin(direction)
+    ''' Idea
+    Create static field around object that covers each square within the size of its mass
+    '''
 
 def moveParticles():
     global things, world
     #print "Moving particles"
+    random.shuffle(things)
     for t in things:
         targetX = int(things[t]['posX'] + things[t]['forceX'])
         targetY = int(things[t]['posY'] + things[t]['forceY'])
@@ -99,19 +103,19 @@ def moveParticles():
 def threadedCalculator(dt):
     random.shuffle(relations)
     threads = []
-    t1 = threading.Thread(name='t1', target=calculateAttractions, args=(0,len(relations)/4-1))
+    t1 = threading.Thread(name='t1', target=calculateForces, args=(0,len(relations)/4-1))
     threads.append(t1)
     t1.start()
 
-    t2 = threading.Thread(name='t2', target=calculateAttractions, args=(len(relations)/4,len(relations)/2-1))
+    t2 = threading.Thread(name='t2', target=calculateForces, args=(len(relations)/4,len(relations)/2-1))
     threads.append(t2)
     t2.start()
 
-    t3 = threading.Thread(name='t3', target=calculateAttractions, args=(len(relations)/2,len(relations)/4*3-1))
+    t3 = threading.Thread(name='t3', target=calculateForces, args=(len(relations)/2,len(relations)/4*3-1))
     threads.append(t3)
     t3.start()
 
-    t4 = threading.Thread(name='t4', target=calculateAttractions, args=(len(relations)/4*3,len(relations)-1))
+    t4 = threading.Thread(name='t4', target=calculateForces, args=(len(relations)/4*3,len(relations)-1))
     threads.append(t4)
     t4.start()
 
