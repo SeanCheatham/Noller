@@ -4,7 +4,6 @@ import MySQLdb as mysql
 import sys
 import math
 import random
-import Queue
 import threading
 from datetime import datetime
 
@@ -39,7 +38,7 @@ def populateData():
         world[thing['posX']][thing['posY']] = thing
 
     print "Populating relations"
-    cur.execute("SELECT * FROM relations")
+    cur.execute("SELECT * FROM relations WHERE value <= 10")
     dbRelations = cur.fetchall()
     for dbRelation in dbRelations:
         relations.append({'parent': dbRelation['parent'], 'child': dbRelation['child'], 'value': dbRelation['value']})
@@ -67,7 +66,7 @@ def findEmptyLocationAroundPoint(x, y, radius):
     return findEmptyLocationAroundPoint(x, y, radius + 1)
 
 #Calculation Function
-def calculateForces(start, end):
+def calculateAttractions(start, end):
     global things, relations
     #print "Calculating attractions for section "+str(start)+" through "+str(end)
     for r in relations[start:end]:
@@ -78,12 +77,31 @@ def calculateForces(start, end):
         deltaY = things[r['parent']]['posY'] - things[r['child']]['posY']
         direction = math.atan2(deltaY, deltaX)
         distance = math.pow(deltaX,2) + math.pow(deltaY,2)
-        afScalar = GRAVITY * (1/r['parent']) * distance
+        afScalar = GRAVITY * (1/r['value']) * distance
         things[r['parent']]['forceX'] -= afScalar * math.cos(direction)
         things[r['parent']]['forceY'] -= afScalar * math.sin(direction)
-    ''' Idea
-    Create static field around object that covers each square within the size of its mass
-    '''
+
+def calculateRepulsions():
+    global things
+    for t in things:
+        for i in range(-5,5):
+            if things[t]['posX'] + i < 0 or things[t]['posX'] + i >= len(world):
+                continue
+            for j in range(-5,5):
+                if things[t]['posY'] + j < 0 or things[t]['posY'] + j >= len(world[i]):
+                    continue
+                if i == 0 and j == 0:
+                    continue
+                if world[things[t]['posX'] + i][things[t]['posY'] + j] is None:
+                    continue
+                deltaX = things[t]['posX'] - world[things[t]['posX'] + i][things[t]['posY'] + j]['posX']
+                deltaY = things[t]['posY'] - world[things[t]['posX'] + i][things[t]['posY'] + j]['posY']
+                direction = math.atan2(deltaY, deltaX)
+                distance = abs(math.sqrt(math.pow(deltaX, 2) + math.pow(deltaY, 2)))
+                if distance > 0:
+                    afScalar = PARTICLE_REPULSION / distance
+                    world[things[t]['posX'] + i][things[t]['posY'] + j]['posX'] -= afScalar * math.cos(direction)
+                    world[things[t]['posX'] + i][things[t]['posY'] + j]['posY'] -= afScalar * math.sin(direction)
 
 def moveParticles():
     global things, world
@@ -103,19 +121,19 @@ def moveParticles():
 def threadedCalculator(dt):
     random.shuffle(relations)
     threads = []
-    t1 = threading.Thread(name='t1', target=calculateForces, args=(0,len(relations)/4-1))
+    t1 = threading.Thread(name='t1', target=calculateAttractions, args=(0,len(relations)/4-1))
     threads.append(t1)
     t1.start()
 
-    t2 = threading.Thread(name='t2', target=calculateForces, args=(len(relations)/4,len(relations)/2-1))
+    t2 = threading.Thread(name='t2', target=calculateAttractions, args=(len(relations)/4,len(relations)/2-1))
     threads.append(t2)
     t2.start()
 
-    t3 = threading.Thread(name='t3', target=calculateForces, args=(len(relations)/2,len(relations)/4*3-1))
+    t3 = threading.Thread(name='t3', target=calculateAttractions, args=(len(relations)/2,len(relations)/4*3-1))
     threads.append(t3)
     t3.start()
 
-    t4 = threading.Thread(name='t4', target=calculateForces, args=(len(relations)/4*3,len(relations)-1))
+    t4 = threading.Thread(name='t4', target=calculateAttractions, args=(len(relations)/4*3,len(relations)-1))
     threads.append(t4)
     t4.start()
 
